@@ -5,19 +5,22 @@ import time
 import random
 from datetime import date, timedelta
 
-# 1. CONFIGURACIÓN VISUAL
+# 1. CONFIGURACIÓN VISUAL Y CARGA DE ESTILOS
 st.set_page_config(page_title="Elite Predictor", page_icon="⚽", layout="wide")
 
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; color: white; }
-    div[data-testid="stMetricValue"] { font-size: 26px; color: #00ffcc; }
-    .stButton>button { width: 100%; border-radius: 10px; background-color: #1a73e8; color: white; height: 3.5em; font-weight: bold; }
-    .stSelectbox label { color: #00ffcc !important; font-size: 18px; }
+    .main { background-color: #0e1117; }
+    [data-testid="stMetricValue"] { font-size: 28px !important; color: #00ffcc !important; }
+    .stButton>button { border-radius: 12px; background-color: #1a73e8; color: white; height: 3.8em; font-weight: bold; border: none; }
+    .stButton>button:hover { background-color: #1557b0; border: none; }
+    .stSelectbox label { color: #00ffcc !important; font-size: 20px; font-weight: bold; }
+    .card { background-color: #1e2130; padding: 15px; border-radius: 10px; border-left: 5px solid #00ffcc; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚽ Elite Football Scanner v4.0")
+st.title("⚽ Elite Football Scanner")
+st.write("Análisis estadístico profesional para tus apuestas.")
 
 # --- DICCIONARIO DE LIGAS ---
 LIGAS_DICT = {
@@ -29,25 +32,22 @@ LIGAS_DICT = {
     "🇫🇷 Ligue 1": 2015
 }
 
-# --- SELECTOR DE LIGA EN LA INTERFAZ ---
-seleccion = st.selectbox("🎯 Elige la liga que quieres analizar:", list(LIGAS_DICT.keys()))
+seleccion = st.selectbox("🎯 Selecciona la liga para hoy:", list(LIGAS_DICT.keys()))
 liga_id = LIGAS_DICT[seleccion]
 
-# --- DATOS DE CONEXIÓN ---
 API_KEY = "9ac6384534674eb593649352a93a2afc"
 HEADERS = { 'X-Auth-Token': API_KEY }
 
 MENSAJES_ESPERA = [
-    "⚽ Inflando los balones...", "🖥️ Consultando al VAR...", 
-    "🏃 Los jugadores están calentando...", "🏟️ Regando el césped...",
-    "📋 Analizando tácticas...", "👟 Lustrando los botines...",
-    "⏳ Calculando probabilidades de último minuto..."
+    "⚽ Analizando los últimos goles...", "🖥️ Revisando el VAR estadístico...", 
+    "🏃 Calentando motores...", "🏟️ Abriendo las puertas del estadio...",
+    "📋 Estudiando alineaciones...", "⏳ Calculando probabilidades..."
 ]
 
 def obtener_fuerza(id_equipo):
     url = f"https://api.football-data.org/v4/teams/{id_equipo}/matches?status=FINISHED"
     try:
-        time.sleep(11) # Respeto a la API gratuita
+        time.sleep(11) # Respeto a la API (Máximo 10 req/min)
         res = requests.get(url, headers=HEADERS).json()
         p = res.get('matches', [])[-5:]
         if not p: return 1.0, 1.0
@@ -56,78 +56,76 @@ def obtener_fuerza(id_equipo):
         return g_m/len(p), g_r/len(p)
     except: return 1.0, 1.0
 
-# --- BOTÓN DE ESCANEO ---
-if st.button(f'🚀 ANALIZAR {seleccion.upper()}'):
+if st.button(f'🚀 INICIAR ESCANEO DE {seleccion.upper()}'):
     hoy = date.today()
     consolidado = []
     
     with st.status(f"🔍 Analizando {seleccion}...", expanded=True) as status:
         try:
             url = f"https://api.football-data.org/v4/competitions/{liga_id}/matches"
+            # Buscamos partidos para los próximos 4 días
             params = {'dateFrom': hoy, 'dateTo': hoy + timedelta(days=4)}
             data = requests.get(url, headers=HEADERS, params=params).json()
             partidos = data.get('matches', [])
             
             if not partidos:
-                st.warning(f"No hay partidos próximos en {seleccion}.")
+                st.warning(f"No hay partidos programados pronto para {seleccion}.")
             else:
-                # Limitamos a 4 partidos para que no tarde más de 1.5 minutos
+                # Procesamos los primeros 4 partidos para optimizar tiempo
                 for p in partidos[:4]:
-                    st.write(random.choice(MENSAJES_ESPERA))
+                    st.toast(random.choice(MENSAJES_ESPERA)) # Mensaje flotante de carga
                     l_nom, v_nom = p['homeTeam']['name'], p['awayTeam']['name']
                     of_l, df_l = obtener_fuerza(p['homeTeam']['id'])
                     of_v, df_v = obtener_fuerza(p['awayTeam']['id'])
                     
                     p_l = ((of_l + df_v) / 2) * 1.15
                     p_v = ((of_v + df_l) / 2) * 0.85
-                    total = p_l + p_v
-                    prob_l = (p_l / total) * 100 if total > 0 else 50
-                    prob_v = (p_v / total) * 100 if total > 0 else 50
+                    total_goles = p_l + p_v
+                    prob_l = (p_l / total_goles) * 100 if total_goles > 0 else 50
+                    prob_v = (p_v / total_goles) * 100 if total_goles > 0 else 50
                     
                     consolidado.append({
                         'Local': l_nom,
                         'Visitante': v_nom,
                         'L %': round(prob_l, 1),
                         'V %': round(prob_v, 1),
-                        'Goles': total,
-                        'Favorito': l_nom if prob_l > prob_v else v_nom,
-                        'Pick': 'Normal'
+                        'Goles': round(total_goles, 2),
+                        'Favorito': l_nom if prob_l > prob_v else v_nom
                     })
         except Exception as e:
-            st.error(f"Error al conectar con la liga: {e}")
+            st.error("La API está saturada. Espera 1 minuto y vuelve a intentar.")
         
-        status.update(label="✅ Análisis listo", state="complete", expanded=False)
+        status.update(label="✅ ¡Análisis Completo!", state="complete", expanded=False)
 
     if consolidado:
         df = pd.DataFrame(consolidado)
         
-        # Lógica de Medallas
-        diffs = (df['L %'] - df['V %']).abs()
-        df.loc[diffs.idxmax(), 'Pick'] = '🏆 DORADA'
-        df.loc[df['Goles'].idxmax(), 'Pick'] = '💀 NEGRA'
-
-        # TARJETAS DE RESULTADOS
+        # --- IDENTIFICACIÓN DE PICKS (Sin errores de índice) ---
+        idx_dorada = (df['L %'] - df['V %']).abs().idxmax()
+        idx_negra = df['Goles'].idxmax()
+        
         st.subheader(f"🌟 Destacados de {seleccion}")
-        c1, c2 = st.columns(2)
+        col1, col2 = st.columns(2)
         
-        dorada = df[df['Pick'] == '🏆 DORADA'].iloc[0]
-        with c1:
-            st.metric("🏆 LA MEJOR OPCIÓN", dorada['Favorito'], f"{max(dorada['L %'], dorada['V %'])}% Prob.")
-            st.caption(f"{dorada['Local']} vs {dorada['Visitante']}")
+        with col1:
+            best = df.loc[idx_dorada]
+            st.metric("🏆 APUESTA DORADA", best['Favorito'], f"{max(best['L %'], best['V %'])}%")
+            st.caption(f"Partido: {best['Local']} vs {best['Visitante']}")
 
-        negra = df[df['Pick'] == '💀 NEGRA'].iloc[0]
-        with c2:
-            st.metric("💀 LEY DEL EX / GOLES", "Más de 2.5", f"{round(negra['Goles'],1)} esperados")
-            st.caption(f"{negra['Local']} vs {negra['Visitante']}")
+        with col2:
+            heavy = df.loc[idx_negra]
+            st.metric("💀 APUESTA NEGRA", f"+{int(heavy['Goles'])} Goles", "Lluvia de Goles")
+            st.caption(f"Partido: {heavy['Local']} vs {heavy['Visitante']}")
 
-        # TABLA SEPARADA POR EQUIPOS
         st.divider()
-        st.subheader("📋 Todas las probabilidades")
-        df_display = df[['Local', 'Visitante', 'L %', 'V %', 'Favorito']]
-        # Añadir el símbolo de % para que se vea mejor
-        df_display['L %'] = df_display['L %'].astype(str) + "%"
-        df_display['V %'] = df_display['V %'].astype(str) + "%"
+        st.subheader("📋 Todas las Probabilidades")
         
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        # Formato de tabla limpia para móvil
+        df_view = df[['Local', 'Visitante', 'L %', 'V %', 'Favorito']]
+        # Transformamos a string con % para estética
+        df_view['L %'] = df_view['L %'].map('{:.1f}%'.format)
+        df_view['V %'] = df_view['V %'].map('{:.1f}%'.format)
+        
+        st.dataframe(df_view, use_container_width=True, hide_index=True)
     else:
-        st.info("Pulsa el botón de arriba para ver los datos.")
+        st.info("No se encontraron datos. Selecciona otra liga o intenta más tarde.")
