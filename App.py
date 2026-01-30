@@ -4,21 +4,10 @@ import pandas as pd
 import time
 from datetime import date, timedelta
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Predicciones Elite", page_icon="⚽", layout="centered")
+# Configuración visual Pro
+st.set_page_config(page_title="Elite Predictor", page_icon="⚽", layout="wide")
+st.title("⚽ Elite Football Scanner v2.0")
 
-# Estilo visual simple (CSS)
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 20px; height: 3em; background-color: #007bff; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.title("⚽ Elite Football Scanner")
-st.write("Pulsa el botón para analizar las mejores ligas de los próximos 4 días.")
-
-# --- TU MOTOR (Lógica Interna) ---
 API_KEY = "9ac6384534674eb593649352a93a2afc"
 HEADERS = { 'X-Auth-Token': API_KEY }
 LIGAS = [2001, 2021, 2014, 2019, 2002, 2015]
@@ -26,7 +15,7 @@ LIGAS = [2001, 2021, 2014, 2019, 2002, 2015]
 def obtener_fuerza(id_equipo):
     url = f"https://api.football-data.org/v4/teams/{id_equipo}/matches?status=FINISHED"
     try:
-        time.sleep(11) # Respeto a la API
+        time.sleep(11) 
         res = requests.get(url, headers=HEADERS).json()
         p = res.get('matches', [])[-5:]
         if not p: return 1.0, 1.0
@@ -35,55 +24,70 @@ def obtener_fuerza(id_equipo):
         return g_m/len(p), g_r/len(p)
     except: return 1.0, 1.0
 
-# --- INTERFAZ DE USUARIO ---
-if st.button("🚀 GENERAR REPORTE DE HOY"):
-    progreso = st.progress(0)
-    status_text = st.empty()
-    
+if st.button('🚀 GENERAR PREDICCIONES Y PICKS'):
     hoy = date.today()
     consolidado = []
+    bar = st.progress(0)
     
-    # Escaneo
-    for idx, liga_id in enumerate(LIGAS):
-        status_text.text(f"Escaneando Liga {liga_id}...")
-        progreso.progress((idx + 1) / len(LIGAS))
-        
+    for i, liga_id in enumerate(LIGAS):
+        bar.progress((i + 1) / len(LIGAS))
         try:
             url = f"https://api.football-data.org/v4/competitions/{liga_id}/matches"
             params = {'dateFrom': hoy, 'dateTo': hoy + timedelta(days=4)}
             data = requests.get(url, headers=HEADERS, params=params).json()
-            partidos = data.get('matches', [])[:2] # Limitamos a 2 por liga para rapidez web
-            
-            for p in partidos:
-                l_nom, v_nom = p['homeTeam']['name'], p['awayTeam']['name']
-                of_l, df_l = obtener_fuerza(p['homeTeam']['id'])
-                of_v, df_v = obtener_fuerza(p['awayTeam']['id'])
+            for p in data.get('matches', [])[:3]:
+                l_id, l_nom = p['homeTeam']['id'], p['homeTeam']['name']
+                v_id, v_nom = p['awayTeam']['id'], p['awayTeam']['name']
+                of_l, df_l = obtener_fuerza(l_id)
+                of_v, df_v = obtener_fuerza(v_id)
                 
+                # Predicción de goles
                 p_l = ((of_l + df_v) / 2) * 1.15
                 p_v = ((of_v + df_l) / 2) * 0.85
                 
+                # Cálculo de Porcentajes
+                total = p_l + p_v
+                prob_l = (p_l / total) * 100 if total > 0 else 50
+                prob_v = (p_v / total) * 100 if total > 0 else 50
+                
                 consolidado.append({
-                    'Partido': f"{l_nom} vs {v_nom}",
-                    'Prob. Local': round(p_l, 1),
-                    'Prob. Visita': round(p_v, 1),
-                    'Favorito': l_nom if p_l > p_v else v_nom
+                    'Liga': data['competition']['name'],
+                    'Local': l_nom,
+                    'Visitante': v_nom,
+                    'Prob. Local %': round(prob_l, 1),
+                    'Prob. Visita %': round(prob_v, 1),
+                    'Goles Est.': round(total, 2),
+                    'Favorito': l_nom if prob_l > prob_v else v_nom,
+                    'Recomendación': 'Normal'
                 })
         except: continue
-
-    status_text.success("¡Análisis completado!")
     
-    # CUADRO GRÁFICO FINAL
     if consolidado:
         df = pd.DataFrame(consolidado)
         
-        # Mostramos una tabla estilizada
-        st.subheader("📊 Resultados Sugeridos")
+        # LÓGICA DE MEDALLAS DINÁMICAS
+        # 1. Dorada: Mayor diferencia entre local y visita
+        diffs = (df['Prob. Local %'] - df['Prob. Visita %']).abs()
+        df.loc[diffs.idxmax(), 'Recomendación'] = '🏆 DORADA'
         
-        # Aplicamos colores a la tabla
-        def highlight_fav(s):
-            return ['background-color: #d4edda' if s.name == 'Favorito' else '' for _ in s]
+        # 2. Negra: Mayor cantidad de goles totales (Espectáculo)
+        df.loc[df['Goles Est.'].idxmax(), 'Recomendación'] = '💀 NEGRA'
+        
+        # 3. Caballo Negro: El partido más parejo (Diferencia mínima)
+        id_caballo = diffs.idxmin()
+        if df.loc[id_caballo, 'Recomendación'] == 'Normal':
+            df.loc[id_caballo, 'Recomendación'] = '🐎 CABALLO NEGRO'
 
-        st.table(df) 
-        st.info("Nota: Los datos se basan en los últimos 5 partidos de cada equipo.")
+        # Mostrar tabla estilizada
+        st.subheader("📊 Análisis de Probabilidades")
+        
+        # Formatear porcentajes para que luzcan como texto con %
+        df_display = df.copy()
+        df_display['Prob. Local %'] = df_display['Prob. Local %'].astype(str) + '%'
+        df_display['Prob. Visita %'] = df_display['Prob. Visita %'].astype(str) + '%'
+        
+        st.dataframe(df_display[['Recomendación', 'Local', 'Visitante', 'Prob. Local %', 'Prob. Visita %', 'Favorito', 'Liga']], use_container_width=True)
+        
+        st.success("✨ Picks generados con éxito. ¡Mucha suerte!")
     else:
-        st.warning("No se encontraron partidos en las próximas horas.")
+        st.write("No hay partidos próximos.")
