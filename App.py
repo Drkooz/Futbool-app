@@ -3,51 +3,84 @@ import requests
 import pandas as pd
 import time
 import random
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 
-# 1. CONFIGURACIÓN VISUAL Y CARGA DE ESTILOS
-st.set_page_config(page_title="Elite Predictor", page_icon="⚽", layout="wide")
+# 1. CONFIGURACIÓN VISUAL Y DISEÑO "ESTADIO"
+st.set_page_config(page_title="Elite Predictor Pro", page_icon="⚽", layout="wide")
 
+# CSS Avanzado para Fondo de Cancha, Bordes de Césped y Efecto Cristal
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; }
-    [data-testid="stMetricValue"] { font-size: 28px !important; color: #00ffcc !important; }
-    .stButton>button { border-radius: 12px; background-color: #1a73e8; color: white; height: 3.8em; font-weight: bold; border: none; }
-    .stButton>button:hover { background-color: #1557b0; border: none; }
-    .stSelectbox label { color: #00ffcc !important; font-size: 20px; font-weight: bold; }
-    .card { background-color: #1e2130; padding: 15px; border-radius: 10px; border-left: 5px solid #00ffcc; margin-bottom: 10px; }
+    /* Fondo con imagen de estadio difuminada */
+    .stApp {
+        background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), 
+        url("https://images.unsplash.com/photo-1508098682722-e99c43a406b2?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80");
+        background-attachment: fixed;
+        background-size: cover;
+    }
+
+    /* Borde "Césped" para el contenedor principal */
+    .block-container {
+        border: 4px solid #2e7d32;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        padding: 20px !important;
+        box-shadow: 0 0 20px rgba(46, 125, 50, 0.5);
+    }
+
+    /* Estilo de Tarjetas y Métricas */
+    div[data-testid="stMetric"] {
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 15px;
+        padding: 15px;
+        border: 1px solid #00ffcc;
+    }
+
+    /* Títulos y Texto */
+    h1, h2, h3, p {
+        color: white !important;
+        text-shadow: 2px 2px 4px #000000;
+    }
+
+    /* Botón Pro */
+    .stButton>button {
+        background: linear-gradient(90deg, #2e7d32, #1b5e20);
+        color: white;
+        border: none;
+        font-weight: bold;
+        border-radius: 30px;
+        height: 3.5em;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        transform: scale(1.02);
+        box-shadow: 0 0 15px #00ffcc;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚽ Elite Football Scanner")
-st.write("Análisis estadístico profesional para tus apuestas.")
-
-# --- DICCIONARIO DE LIGAS ---
+# --- DICCIONARIO DE LIGAS CON BANDERAS ---
 LIGAS_DICT = {
-    "🇪🇺 Champions League": 2001,
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": 2021,
-    "🇪🇸 La Liga": 2014,
-    "🇮🇹 Serie A": 2019,
-    "🇩🇪 Bundesliga": 2002,
-    "🇫🇷 Ligue 1": 2015
+    "🇪🇺 UEFA Champions League": 2001,
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League (Inglaterra)": 2021,
+    "🇪🇸 La Liga (España)": 2014,
+    "🇮🇹 Serie A (Italia)": 2019,
+    "🇩🇪 Bundesliga (Alemania)": 2002,
+    "🇫🇷 Ligue 1 (Francia)": 2015
 }
 
-seleccion = st.selectbox("🎯 Selecciona la liga para hoy:", list(LIGAS_DICT.keys()))
+st.title("⚽ Scanner de Élite")
+seleccion = st.selectbox("📍 Selecciona la competición:", list(LIGAS_DICT.keys()))
 liga_id = LIGAS_DICT[seleccion]
 
 API_KEY = "9ac6384534674eb593649352a93a2afc"
 HEADERS = { 'X-Auth-Token': API_KEY }
 
-MENSAJES_ESPERA = [
-    "⚽ Analizando los últimos goles...", "🖥️ Revisando el VAR estadístico...", 
-    "🏃 Calentando motores...", "🏟️ Abriendo las puertas del estadio...",
-    "📋 Estudiando alineaciones...", "⏳ Calculando probabilidades..."
-]
-
 def obtener_fuerza(id_equipo):
     url = f"https://api.football-data.org/v4/teams/{id_equipo}/matches?status=FINISHED"
     try:
-        time.sleep(11) # Respeto a la API (Máximo 10 req/min)
+        time.sleep(11) # Respeto a API gratuita
         res = requests.get(url, headers=HEADERS).json()
         p = res.get('matches', [])[-5:]
         if not p: return 1.0, 1.0
@@ -56,76 +89,73 @@ def obtener_fuerza(id_equipo):
         return g_m/len(p), g_r/len(p)
     except: return 1.0, 1.0
 
-if st.button(f'🚀 INICIAR ESCANEO DE {seleccion.upper()}'):
-    hoy = date.today()
+if st.button(f'🏟️ ANALIZAR {seleccion.upper()}'):
+    hoy = datetime.now()
     consolidado = []
     
-    with st.status(f"🔍 Analizando {seleccion}...", expanded=True) as status:
+    with st.status("📊 Procesando big data deportivo...", expanded=True) as status:
         try:
             url = f"https://api.football-data.org/v4/competitions/{liga_id}/matches"
-            # Buscamos partidos para los próximos 4 días
-            params = {'dateFrom': hoy, 'dateTo': hoy + timedelta(days=4)}
+            params = {'dateFrom': hoy.date(), 'dateTo': (hoy + timedelta(days=5)).date()}
             data = requests.get(url, headers=HEADERS, params=params).json()
             partidos = data.get('matches', [])
             
             if not partidos:
-                st.warning(f"No hay partidos programados pronto para {seleccion}.")
+                st.warning(f"No hay partidos registrados hoy en {seleccion}.")
             else:
-                # Procesamos los primeros 4 partidos para optimizar tiempo
                 for p in partidos[:4]:
-                    st.toast(random.choice(MENSAJES_ESPERA)) # Mensaje flotante de carga
-                    l_nom, v_nom = p['homeTeam']['name'], p['awayTeam']['name']
-                    of_l, df_l = obtener_fuerza(p['homeTeam']['id'])
-                    of_v, df_v = obtener_fuerza(p['awayTeam']['id'])
+                    st.write(f"🔄 Analizando: {p['homeTeam']['name']} vs {p['awayTeam']['name']}")
+                    l_id, v_id = p['homeTeam']['id'], p['awayTeam']['id']
+                    of_l, df_l = obtener_fuerza(l_id)
+                    of_v, df_v = obtener_fuerza(v_id)
                     
+                    # Cálculo de Predicción
                     p_l = ((of_l + df_v) / 2) * 1.15
                     p_v = ((of_v + df_l) / 2) * 0.85
-                    total_goles = p_l + p_v
-                    prob_l = (p_l / total_goles) * 100 if total_goles > 0 else 50
-                    prob_v = (p_v / total_goles) * 100 if total_goles > 0 else 50
+                    total = p_l + p_v
+                    prob_l = (p_l / total) * 100 if total > 0 else 50
+                    
+                    # Formatear Fecha
+                    fecha_dt = datetime.strptime(p['utcDate'], "%Y-%m-%dT%H:%M:%SZ")
+                    fecha_local = fecha_dt - timedelta(hours=5) # Ajuste manual a tu hora local
                     
                     consolidado.append({
-                        'Local': l_nom,
-                        'Visitante': v_nom,
+                        'Fecha': fecha_local.strftime("%d %b - %H:%M"),
+                        'Local': p['homeTeam']['name'],
+                        'Visitante': p['awayTeam']['name'],
                         'L %': round(prob_l, 1),
-                        'V %': round(prob_v, 1),
-                        'Goles': round(total_goles, 2),
-                        'Favorito': l_nom if prob_l > prob_v else v_nom
+                        'V %': round(100 - prob_l, 1),
+                        'Favorito': p['homeTeam']['name'] if prob_l > 50 else p['awayTeam']['name'],
+                        'Goles': total
                     })
-        except Exception as e:
-            st.error("La API está saturada. Espera 1 minuto y vuelve a intentar.")
+        except: st.error("Error de conexión. Intenta en 1 minuto.")
         
-        status.update(label="✅ ¡Análisis Completo!", state="complete", expanded=False)
+        status.update(label="✅ Scanner Finalizado", state="complete", expanded=False)
 
     if consolidado:
         df = pd.DataFrame(consolidado)
         
-        # --- IDENTIFICACIÓN DE PICKS (Sin errores de índice) ---
-        idx_dorada = (df['L %'] - df['V %']).abs().idxmax()
-        idx_negra = df['Goles'].idxmax()
+        # --- TOP PICKS ---
+        idx_dorada = (df['L %'] - 50).abs().idxmax()
+        st.subheader(f"🌟 Los mejores Picks: {seleccion}")
         
-        st.subheader(f"🌟 Destacados de {seleccion}")
-        col1, col2 = st.columns(2)
-        
-        with col1:
+        c1, c2 = st.columns(2)
+        with c1:
             best = df.loc[idx_dorada]
             st.metric("🏆 APUESTA DORADA", best['Favorito'], f"{max(best['L %'], best['V %'])}%")
-            st.caption(f"Partido: {best['Local']} vs {best['Visitante']}")
+            st.write(f"📅 {best['Fecha']} | {best['Local']} vs {best['Visitante']}")
+        
+        with c2:
+            heavy = df.loc[df['Goles'].idxmax()]
+            st.metric("💀 APUESTA NEGRA", f"+{round(heavy['Goles'],1)} Goles", "Over 2.5")
+            st.write(f"📅 {heavy['Fecha']} | {heavy['Local']} vs {heavy['Visitante']}")
 
-        with col2:
-            heavy = df.loc[idx_negra]
-            st.metric("💀 APUESTA NEGRA", f"+{int(heavy['Goles'])} Goles", "Lluvia de Goles")
-            st.caption(f"Partido: {heavy['Local']} vs {heavy['Visitante']}")
-
+        # --- TABLA DE DATOS ---
         st.divider()
-        st.subheader("📋 Todas las Probabilidades")
+        st.subheader("📋 Calendario Detallado")
         
-        # Formato de tabla limpia para móvil
-        df_view = df[['Local', 'Visitante', 'L %', 'V %', 'Favorito']]
-        # Transformamos a string con % para estética
-        df_view['L %'] = df_view['L %'].map('{:.1f}%'.format)
-        df_view['V %'] = df_view['V %'].map('{:.1f}%'.format)
+        # Estilizar porcentajes para la tabla
+        df_show = df[['Fecha', 'Local', 'Visitante', 'L %', 'V %', 'Favorito']]
+        st.dataframe(df_show, use_container_width=True, hide_index=True)
         
-        st.dataframe(df_view, use_container_width=True, hide_index=True)
-    else:
-        st.info("No se encontraron datos. Selecciona otra liga o intenta más tarde.")
+        st.caption("⚠️ Los datos son estimaciones basadas en los últimos 5 encuentros oficiales.")
