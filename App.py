@@ -1,79 +1,90 @@
 import streamlit as st
 import requests
 import pandas as pd
-import time
-import random
 from datetime import datetime, timedelta
 
-# 1. CONFIGURACIÓN VISUAL MAESTRA
-st.set_page_config(page_title="Elite Predictor Pro", page_icon="⚽", layout="wide")
+# ==========================================
+# CONFIGURACIÓN GENERAL
+# ==========================================
 
-# CSS REFORZADO PARA ALTO CONTRASTE
+st.set_page_config(
+    page_title="Elite Predictor Pro",
+    page_icon="⚽",
+    layout="wide"
+)
+
+# ==========================================
+# CSS
+# ==========================================
+
 st.markdown("""
-    <style>
-    /* Fondo General */
-    .stApp {
-        background-color: #000000;
-        background-image: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)), 
-        url("https://images.unsplash.com/photo-1508098682722-e99c43a406b2?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80");
-        background-size: cover;
-    }
+<style>
 
-    /* CONTENEDOR PRINCIPAL CON FONDO SÓLIDO */
-    .block-container {
-        background: rgba(20, 20, 20, 0.95) !important;
-        border: 4px solid #39FF14 !important;
-        border-radius: 20px;
-        padding: 30px !important;
-        box-shadow: 0 0 40px rgba(57, 255, 20, 0.4);
-    }
+/* Fondo */
+.stApp {
+    background-color: #000000;
+    background-image:
+    linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)),
+    url("https://images.unsplash.com/photo-1508098682722-e99c43a406b2?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80");
+    background-size: cover;
+}
 
-    /* TEXTO CON MÁXIMO BRILLO */
-    h1, h2, h3, h4, p, span, li {
-        color: #FFFFFF !important;
-        font-weight: 800 !important;
-        text-shadow: 2px 2px 4px #000000 !important;
-    }
+/* Contenedor */
+.block-container {
+    background: rgba(20,20,20,0.95);
+    border: 3px solid #39FF14;
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 0 40px rgba(57,255,20,0.3);
+}
 
-    /* SELECTOR DE LIGA - FONDO CLARO PARA PC */
-    div[data-baseweb="select"] > div {
-        background-color: #FFFFFF !important;
-        border: 2px solid #39FF14 !important;
-    }
-    
-    div[data-baseweb="select"] span, div[role="listbox"] span {
-        color: #000000 !important;
-        font-weight: bold !important;
-    }
+/* Textos */
+h1, h2, h3, h4, p, span, li {
+    color: white !important;
+    font-weight: bold;
+}
 
-    /* TARJETAS DE MÉTRICAS CON FONDO MÁS CLARO */
-    div[data-testid="stMetric"] {
-        background: #1a1a1a !important;
-        border: 2px solid #39FF14 !important;
-        border-radius: 15px;
-        padding: 20px !important;
-    }
+/* Select */
+div[data-baseweb="select"] > div {
+    background-color: white !important;
+    border: 2px solid #39FF14 !important;
+}
 
-    /* VALORES DE LAS MÉTRICAS */
-    div[data-testid="stMetricValue"] {
-        color: #39FF14 !important;
-        font-size: 32px !important;
-    }
+div[data-baseweb="select"] span {
+    color: black !important;
+}
 
-    /* BOTÓN ANALIZAR */
-    .stButton>button {
-        background: #39FF14 !important;
-        color: #000000 !important;
-        font-size: 20px !important;
-        font-weight: bold !important;
-        border-radius: 50px !important;
-        height: 3em !important;
-        width: 100% !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+/* Botón */
+.stButton > button {
+    background: #39FF14 !important;
+    color: black !important;
+    font-size: 20px !important;
+    font-weight: bold !important;
+    border-radius: 50px !important;
+    height: 3em !important;
+    width: 100% !important;
+}
 
-# Ligas con nombres en mayúsculas para mejor lectura
+/* Métricas */
+div[data-testid="stMetric"] {
+    background: #111111;
+    border: 2px solid #39FF14;
+    border-radius: 15px;
+    padding: 20px;
+}
+
+div[data-testid="stMetricValue"] {
+    color: #39FF14 !important;
+    font-size: 32px !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# LIGAS
+# ==========================================
+
 LIGAS_DICT = {
     "EUROPA - CHAMPIONS LEAGUE": 2001,
     "INGLATERRA - PREMIER LEAGUE": 2021,
@@ -83,86 +94,377 @@ LIGAS_DICT = {
     "FRANCIA - LIGUE 1": 2015
 }
 
-st.markdown('<h1>⚽ ELITE FOOTBALL SCANNER</h1>', unsafe_allow_html=True)
-st.markdown('<p style="color: #39FF14 !important;">PROFESSIONAL DATA ANALYSIS</p>', unsafe_allow_html=True)
+st.markdown("# ⚽ ELITE FOOTBALL SCANNER")
+st.markdown("### PROFESSIONAL DATA ANALYSIS")
 
-# Selector
-seleccion = st.selectbox("📍 ELIGE TU LIGA ABAJO:", list(LIGAS_DICT.keys()))
+seleccion = st.selectbox(
+    "📍 ELIGE TU LIGA:",
+    list(LIGAS_DICT.keys())
+)
+
 liga_id = LIGAS_DICT[seleccion]
 
-API_KEY = "9ac6384534674eb593649352a93a2afc"
-HEADERS = { 'X-Auth-Token': API_KEY }
+# ==========================================
+# API
+# ==========================================
 
+API_KEY = "TU_API_KEY"
+HEADERS = {'X-Auth-Token': API_KEY}
+
+# ==========================================
+# FUNCIÓN PRINCIPAL
+# ==========================================
+
+@st.cache_data(ttl=3600)
 def obtener_fuerza(id_equipo):
-    url = f"https://api.football-data.org/v4/teams/{id_equipo}/matches?status=FINISHED"
-    try:
-        time.sleep(11) 
-        res = requests.get(url, headers=HEADERS).json()
-        p = res.get('matches', [])[-5:]
-        if not p: return 1.0, 1.0
-        g_m = sum(m['score']['fullTime']['home'] if m['homeTeam']['id'] == id_equipo else m['score']['fullTime']['away'] for m in p)
-        g_r = sum(m['score']['fullTime']['away'] if m['homeTeam']['id'] == id_equipo else m['score']['fullTime']['home'] for m in p)
-        return g_m/len(p), g_r/len(p)
-    except: return 1.0, 1.0
 
-if st.button(f'🏟️ ANALIZAR {seleccion}'):
-    hoy = datetime.now()
-    consolidado = []
-    
-    with st.status("🚀 PROCESANDO DATOS...", expanded=True) as status:
-        try:
-            url = f"https://api.football-data.org/v4/competitions/{liga_id}/matches"
-            params = {'dateFrom': hoy.date(), 'dateTo': (hoy + timedelta(days=5)).date()}
-            data = requests.get(url, headers=HEADERS, params=params).json()
-            partidos = data.get('matches', [])
-            
-            if not partidos:
-                st.warning("SIN PARTIDOS PRÓXIMOS.")
+    url = f"https://api.football-data.org/v4/teams/{id_equipo}/matches?status=FINISHED"
+
+    try:
+        res = requests.get(url, headers=HEADERS).json()
+
+        partidos = res.get('matches', [])[-10:]
+
+        if not partidos:
+            return {
+                'ataque': 1,
+                'defensa': 1,
+                'forma': 0.5,
+                'over25': 0.5,
+                'local_winrate': 0.5,
+                'visit_winrate': 0.5,
+                'dif_goles': 0
+            }
+
+        pesos = [1,2,3,4,5,6,7,8,9,10]
+
+        goles_favor = 0
+        goles_contra = 0
+        puntos = 0
+        over25 = 0
+        dif_total = 0
+
+        local_games = 0
+        local_wins = 0
+
+        away_games = 0
+        away_wins = 0
+
+        peso_total = sum(pesos)
+
+        for i, m in enumerate(partidos):
+
+            peso = pesos[i]
+
+            es_local = m['homeTeam']['id'] == id_equipo
+
+            gf = (
+                m['score']['fullTime']['home']
+                if es_local
+                else m['score']['fullTime']['away']
+            )
+
+            gc = (
+                m['score']['fullTime']['away']
+                if es_local
+                else m['score']['fullTime']['home']
+            )
+
+            gf = gf if gf is not None else 0
+            gc = gc if gc is not None else 0
+
+            goles_favor += gf * peso
+            goles_contra += gc * peso
+
+            dif_total += (gf - gc)
+
+            # FORMA
+            if gf > gc:
+
+                puntos += 3 * peso
+
+                if es_local:
+                    local_wins += 1
+                else:
+                    away_wins += 1
+
+            elif gf == gc:
+                puntos += 1 * peso
+
+            # OVER 2.5
+            if (gf + gc) >= 3:
+                over25 += peso
+
+            # LOCAL / VISITA
+            if es_local:
+                local_games += 1
             else:
-                for p in partidos[:4]:
-                    st.write(f"✔ Analizando: {p['homeTeam']['name']}")
-                    of_l, df_l = obtener_fuerza(p['homeTeam']['id'])
-                    of_v, df_v = obtener_fuerza(p['awayTeam']['id'])
-                    
-                    p_l = ((of_l + df_v) / 2) * 1.15
-                    p_v = ((of_v + df_l) / 2) * 0.85
-                    total = p_l + p_v
-                    prob_l = (p_l / total) * 100 if total > 0 else 50
-                    
-                    fecha_dt = datetime.strptime(p['utcDate'], "%Y-%m-%dT%H:%M:%SZ")
-                    fecha_local = fecha_dt - timedelta(hours=5) 
-                    
+                away_games += 1
+
+        ataque = goles_favor / peso_total
+        defensa = goles_contra / peso_total
+
+        forma = puntos / (peso_total * 3)
+
+        over25_rate = over25 / peso_total
+
+        local_winrate = (
+            local_wins / local_games
+            if local_games > 0 else 0.5
+        )
+
+        away_winrate = (
+            away_wins / away_games
+            if away_games > 0 else 0.5
+        )
+
+        return {
+            'ataque': ataque,
+            'defensa': defensa,
+            'forma': forma,
+            'over25': over25_rate,
+            'local_winrate': local_winrate,
+            'visit_winrate': away_winrate,
+            'dif_goles': dif_total / len(partidos)
+        }
+
+    except:
+        return {
+            'ataque': 1,
+            'defensa': 1,
+            'forma': 0.5,
+            'over25': 0.5,
+            'local_winrate': 0.5,
+            'visit_winrate': 0.5,
+            'dif_goles': 0
+        }
+
+# ==========================================
+# BOTÓN PRINCIPAL
+# ==========================================
+
+if st.button(f"🏟️ ANALIZAR {seleccion}"):
+
+    hoy = datetime.now()
+
+    consolidado = []
+
+    with st.status("🚀 PROCESANDO DATOS...", expanded=True):
+
+        try:
+
+            url = f"https://api.football-data.org/v4/competitions/{liga_id}/matches"
+
+            params = {
+                'dateFrom': hoy.date(),
+                'dateTo': (hoy + timedelta(days=5)).date()
+            }
+
+            data = requests.get(
+                url,
+                headers=HEADERS,
+                params=params
+            ).json()
+
+            partidos = data.get('matches', [])
+
+            if not partidos:
+
+                st.warning("SIN PARTIDOS DISPONIBLES")
+
+            else:
+
+                for p in partidos[:6]:
+
+                    st.write(
+                        f"✔ Analizando: "
+                        f"{p['homeTeam']['name']} vs "
+                        f"{p['awayTeam']['name']}"
+                    )
+
+                    local = obtener_fuerza(
+                        p['homeTeam']['id']
+                    )
+
+                    visita = obtener_fuerza(
+                        p['awayTeam']['id']
+                    )
+
+                    # ==================================
+                    # NUEVO MODELO
+                    # ==================================
+
+                    score_local = (
+                        local['ataque'] * 0.30 +
+                        (2 - visita['defensa']) * 0.20 +
+                        local['forma'] * 0.20 +
+                        local['local_winrate'] * 0.15 +
+                        local['dif_goles'] * 0.10 +
+                        local['over25'] * 0.05
+                    )
+
+                    score_visita = (
+                        visita['ataque'] * 0.30 +
+                        (2 - local['defensa']) * 0.20 +
+                        visita['forma'] * 0.20 +
+                        visita['visit_winrate'] * 0.15 +
+                        visita['dif_goles'] * 0.10 +
+                        visita['over25'] * 0.05
+                    )
+
+                    # ==================================
+                    # EMPATE
+                    # ==================================
+
+                    diferencia = abs(
+                        score_local - score_visita
+                    )
+
+                    prob_empate = max(
+                        15,
+                        35 - (diferencia * 10)
+                    )
+
+                    total = score_local + score_visita
+
+                    prob_local = (
+                        (score_local / total)
+                        * (100 - prob_empate)
+                    )
+
+                    prob_visita = (
+                        (score_visita / total)
+                        * (100 - prob_empate)
+                    )
+
+                    # Limitar extremos
+                    prob_local = max(5, min(prob_local, 90))
+                    prob_visita = max(5, min(prob_visita, 90))
+
+                    # FAVORITO
+                    favorito = "EMPATE"
+
+                    if prob_local > prob_visita and prob_local > prob_empate:
+                        favorito = p['homeTeam']['name']
+
+                    elif prob_visita > prob_local and prob_visita > prob_empate:
+                        favorito = p['awayTeam']['name']
+
+                    # FECHA
+                    fecha_dt = datetime.strptime(
+                        p['utcDate'],
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    )
+
+                    fecha_local = fecha_dt - timedelta(hours=5)
+
                     consolidado.append({
-                        'FECHA': fecha_local.strftime("%d %b | %H:%M"),
-                        'LOCAL': p['homeTeam']['name'],
-                        'VISITA': p['awayTeam']['name'],
-                        'L %': round(prob_l, 1),
-                        'V %': round(100 - prob_l, 1),
-                        'FAVORITO': p['homeTeam']['name'] if prob_l > 50 else p['awayTeam']['name'],
-                        'GOLES': total
+
+                        'FECHA':
+                            fecha_local.strftime("%d %b | %H:%M"),
+
+                        'LOCAL':
+                            p['homeTeam']['name'],
+
+                        'VISITA':
+                            p['awayTeam']['name'],
+
+                        'L %':
+                            round(prob_local, 1),
+
+                        'EMPATE %':
+                            round(prob_empate, 1),
+
+                        'V %':
+                            round(prob_visita, 1),
+
+                        'FAVORITO':
+                            favorito,
+
+                        'GOLES':
+                            round(
+                                local['ataque']
+                                +
+                                visita['ataque'],
+                                2
+                            )
                     })
-        except: st.error("LÍMITE DE API. ESPERA 1 MINUTO.")
-        status.update(label="✅ ANÁLISIS LISTO", state="complete", expanded=False)
+
+        except Exception as e:
+            st.error(f"ERROR: {e}")
+
+    # ==========================================
+    # RESULTADOS
+    # ==========================================
 
     if consolidado:
-        df = pd.DataFrame(consolidado)
-        idx_dorada = (df['L %'] - 50).abs().idxmax()
-        
-        st.markdown('## 🏆 SELECCIONES VIP')
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            best = df.iloc[idx_dorada]
-            st.metric("🏆 APUESTA DORADA", best['FAVORITO'], f"{max(best['L %'], best['V %'])}% PROB.")
-            st.markdown(f"**PARTIDO:** {best['LOCAL']} vs {best['VISITA']}")
-            st.markdown(f"**HORA:** {best['FECHA']}")
-        
-        with c2:
-            heavy = df.loc[df['GOLES'].idxmax()]
-            st.metric("💀 APUESTA NEGRA", f"{round(heavy['GOLES'],1)} GOLES", "OVER 2.5")
-            st.markdown(f"**PARTIDO:** {heavy['LOCAL']} vs {heavy['VISITA']}")
-            st.markdown(f"**HORA:** {heavy['FECHA']}")
 
-        st.markdown('## 📊 CALENDARIO COMPLETO')
-        # Tabla con fondo contrastado
-        st.dataframe(df[['FECHA', 'LOCAL', 'VISITA', 'L %', 'V %', 'FAVORITO']], use_container_width=True, hide_index=True)
+        df = pd.DataFrame(consolidado)
+
+        st.markdown("## 🏆 SELECCIONES VIP")
+
+        idx_dorada = (
+            df[['L %', 'V %', 'EMPATE %']]
+            .max(axis=1)
+            .idxmax()
+        )
+
+        best = df.iloc[idx_dorada]
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+
+            st.metric(
+                "🏆 APUESTA DORADA",
+                best['FAVORITO'],
+                f"{max(best['L %'], best['V %'], best['EMPATE %'])}%"
+            )
+
+            st.markdown(
+                f"### {best['LOCAL']} vs {best['VISITA']}"
+            )
+
+            st.markdown(
+                f"🕒 {best['FECHA']}"
+            )
+
+        with c2:
+
+            heavy = df.loc[df['GOLES'].idxmax()]
+
+            st.metric(
+                "💀 OVER PROBABLE",
+                f"{heavy['GOLES']} GOLES",
+                "OVER 2.5"
+            )
+
+            st.markdown(
+                f"### {heavy['LOCAL']} vs {heavy['VISITA']}"
+            )
+
+            st.markdown(
+                f"🕒 {heavy['FECHA']}"
+            )
+
+        # ======================================
+        # TABLA
+        # ======================================
+
+        st.markdown("## 📊 CALENDARIO COMPLETO")
+
+        st.dataframe(
+            df[
+                [
+                    'FECHA',
+                    'LOCAL',
+                    'VISITA',
+                    'L %',
+                    'EMPATE %',
+                    'V %',
+                    'FAVORITO'
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True
+        )
